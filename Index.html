@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Gerador de Plugin - Mary</title>
+  <style>
+    body {
+      background: #111;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 50px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 10px;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+    input {
+      width: 300px;
+    }
+    button {
+      background-color: #00ff99;
+      color: #000;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gerador de Plugin do Bot Mary</h1>
+  <form action="/gerar" method="POST">
+    <input type="text" name="nome" placeholder="Nome do Plugin" required><br>
+    <input type="text" name="prefixo" placeholder="Prefixo do Comando" required><br>
+    <input type="text" name="dono" placeholder="Número do Dono" required><br>
+    <button type="submit">Gerar Plugin</button>
+  </form>
+</body>
+</html>
