@@ -1,0 +1,23 @@
+{
+  "name": "imperadores-bot-generator",
+  "version": "1.0.0",
+  "description": "Gerador de bots Baileys personalizado estilo Imperadores da Web",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "bot",
+    "whatsapp",
+    "baileys",
+    "gerador",
+    "imperadores"
+  ],
+  "author": "Imperadores da Web",
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^5.3.1",
+    "body-parser": "^1.20.2",
+    "express": "^4.18.2"
+  }
+}
