@@ -143,5 +143,5 @@ startBot();
 });
 
 app.listen(PORT, () => {
-  console.log(\`✅ Gerador rodando: http://localhost:\${PORT}\`);
+  console.log(`✅ Gerador rodando: http://localhost:${PORT}`);
 });
