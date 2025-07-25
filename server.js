@@ -1,83 +1,74 @@
 const express = require('express');
 const fs = require('fs');
 const archiver = require('archiver');
+const path = require('path');
 const app = express();
-const port = 3000;
 
 app.use(express.urlencoded({ extended: true }));
 
-// Página HTML
-app.get('/', (req, res) => {
+// HTML direto com CSS exagerado e responsivo
+app.get('/', (_, res) => {
   res.send(`
-  <!DOCTYPE html>
   <html lang="pt-BR">
   <head>
-    <meta charset="UTF-8">
-    <title>Gerador de Bot</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <title>Gerador de Bot WhatsApp</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        background: linear-gradient(to right, #0f0c29, #302b63, #24243e);
+        margin: 0;
+        padding: 0;
+        background: linear-gradient(135deg, #ff00cc, #3333ff);
+        font-family: 'Comic Sans MS', cursive, sans-serif;
+        animation: pulse 5s infinite;
         color: white;
-        font-family: 'Segoe UI', sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 40px 20px;
+        text-align: center;
+      }
+      @keyframes pulse {
+        0% { filter: hue-rotate(0deg); }
+        100% { filter: hue-rotate(360deg); }
       }
       h1 {
-        font-size: 2em;
-        margin-bottom: 20px;
-        animation: blink 1.5s infinite;
+        font-size: 3em;
+        text-shadow: 0 0 10px #fff, 0 0 20px #ff0;
+        animation: escrever 5s steps(20) infinite alternate;
+        white-space: nowrap;
+        overflow: hidden;
+        border-right: 3px solid white;
+        width: 24ch;
+        margin: auto;
       }
-      @keyframes blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.4; }
+      @keyframes escrever {
+        from { width: 0; }
+        to { width: 24ch; }
       }
       form {
-        background: rgba(255, 255, 255, 0.1);
-        padding: 20px;
-        border-radius: 10px;
-        width: 100%;
-        max-width: 400px;
+        margin-top: 50px;
       }
-      label {
-        display: block;
-        margin: 10px 0 5px;
-      }
-      input {
-        width: 100%;
-        padding: 10px;
+      input, button {
+        padding: 15px;
+        margin: 10px;
         border: none;
-        border-radius: 5px;
-        margin-bottom: 15px;
+        border-radius: 10px;
+        font-size: 1.2em;
       }
       button {
-        width: 100%;
-        padding: 12px;
-        background: #ff0066;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 1em;
+        background: yellow;
+        color: black;
         cursor: pointer;
-        transition: background 0.3s;
+        font-weight: bold;
+        box-shadow: 0 0 20px yellow;
+        transition: 0.3s;
       }
       button:hover {
-        background: #ff3399;
+        transform: scale(1.1);
       }
     </style>
   </head>
   <body>
-    <h1>🔥 Gerador de Bot WhatsApp 🔥</h1>
-    <form action="/download" method="POST">
-      <label>Nome do Bot:</label>
-      <input type="text" name="nome" required />
-      <label>Prefixo:</label>
-      <input type="text" name="prefixo" required />
-      <label>Número do Dono (com DDI):</label>
-      <input type="text" name="dono" required />
+    <h1>Gerador de Bot</h1>
+    <form method="POST" action="/download">
+      <input type="text" name="nomeBot" placeholder="Nome do Bot (ex: mary)" required />
       <button type="submit">Download</button>
     </form>
   </body>
@@ -85,98 +76,86 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Rota para gerar e baixar o ZIP
-app.post('/download', (req, res) => {
-  const { nome, prefixo, dono } = req.body;
+app.post('/download', async (req, res) => {
+  const nomeBot = req.body.nomeBot.replace(/[^a-zA-Z0-9]/g, '') || 'meuBot';
+  const pasta = `/tmp/${nomeBot}`;
+  const botPath = path.join(pasta, 'bot.js');
+  const settingsPath = path.join(pasta, 'settings.json');
+  const packagePath = path.join(pasta, 'package.json');
 
-  // Conteúdo do bot com switch-case
-  const botCode = `
-const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion
-} = require("@whiskeysockets/baileys");
+  fs.mkdirSync(pasta, { recursive: true });
 
-const fs = require("fs");
-const P = require("pino");
-const settings = require("./settings.json");
+  fs.writeFileSync(botPath, `
+// BOT COMPLETO usando whiskeysockets
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const fs = require('fs');
 
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("auth");
-  const { version } = await fetchLatestBaileysVersion();
-
+async function iniciar() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth');
   const imp = makeWASocket({
-    version,
-    logger: P({ level: "silent" }),
-    printQRInTerminal: true,
-    auth: state
+    auth: state,
+    printQRInTerminal: true
   });
 
-  imp.ev.on("creds.update", saveCreds);
+  imp.ev.on('creds.update', saveCreds);
 
-  imp.ev.on("messages.upsert", async ({ messages }) => {
+  imp.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
-    if (!msg.message) return;
+    if (!msg.message || msg.key.fromMe) return;
 
-    const tipo = Object.keys(msg.message)[0];
-    const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
-
-    if (!texto.startsWith(settings.prefixo)) return;
-    const args = texto.slice(settings.prefixo.length).trim().split(/ +/);
-    const comando = args.shift()?.toLowerCase();
+    const body = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+    const comando = body.trim().toLowerCase().split(" ")[0];
 
     switch (comando) {
-      case "oi":
-        await imp.sendMessage(msg.key.remoteJid, { text: "Oi meu patrão!" });
+      case '!menu':
+        await imp.sendMessage(msg.key.remoteJid, { text: '🛠 MENU DO BOT:\\n!menu\\n!info\\n!dono' });
         break;
-      case "dono":
-        await imp.sendMessage(msg.key.remoteJid, { text: "Meu dono é: ${settings.dono}" });
+      case '!info':
+        await imp.sendMessage(msg.key.remoteJid, { text: '🤖 Bot criado por você mesmo!' });
+        break;
+      case '!dono':
+        await imp.sendMessage(msg.key.remoteJid, { text: '👑 Criado por você, o brabo!' });
         break;
       default:
-        await imp.sendMessage(msg.key.remoteJid, { text: "Comando não encontrado!" });
+        await imp.sendMessage(msg.key.remoteJid, { text: '❓ Comando não reconhecido!' });
     }
   });
 }
 
-startBot();
-`;
+iniciar();
+`);
 
-  const packageJSON = {
-    name: nome.toLowerCase().replace(/\s+/g, "-"),
+  fs.writeFileSync(settingsPath, JSON.stringify({
+    prefix: "!",
+    nome_bot: nomeBot,
+    dono: "Você",
+    comandos: ["!menu", "!info", "!dono"]
+  }, null, 2));
+
+  fs.writeFileSync(packagePath, JSON.stringify({
+    name: nomeBot,
     version: "1.0.0",
     main: "bot.js",
-    scripts: {
-      start: "node bot.js"
-    },
+    scripts: { start: "node bot.js" },
     dependencies: {
-      "@whiskeysockets/baileys": "^6.7.0",
-      "pino": "^8.0.0"
+      "@whiskeysockets/baileys": "^6.7.0"
     }
-  };
+  }, null, 2));
 
-  const settingsJSON = {
-    nome,
-    prefixo,
-    dono
-  };
+  const zipPath = path.join(__dirname, `${nomeBot}.zip`);
+  const output = fs.createWriteStream(zipPath);
+  const archive = archiver('zip');
 
-  // Cria arquivos temporários
-  fs.mkdirSync("temp", { recursive: true });
-  fs.writeFileSync("temp/bot.js", botCode);
-  fs.writeFileSync("temp/package.json", JSON.stringify(packageJSON, null, 2));
-  fs.writeFileSync("temp/settings.json", JSON.stringify(settingsJSON, null, 2));
+  output.on('close', () => {
+    res.download(zipPath, `${nomeBot}.zip`, () => {
+      fs.rmSync(pasta, { recursive: true, force: true });
+      fs.unlinkSync(zipPath);
+    });
+  });
 
-  res.setHeader("Content-Type", "application/zip");
-  res.setHeader("Content-Disposition", "attachment; filename=meu-bot.zip");
-
-  const archive = archiver("zip");
-  archive.pipe(res);
-  archive.directory("temp/", false);
+  archive.pipe(output);
+  archive.directory(pasta, false);
   archive.finalize();
-
-  archive.on("end", () => fs.rmSync("temp", { recursive: true, force: true }));
 });
 
-app.listen(port, () => {
-  console.log(`ONLINE PRA MUDAR REALIDADES`);
-});
+app.listen(3000, () => console.log('✅ Gerador rodando em http://localhost:3000'));
