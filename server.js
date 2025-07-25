@@ -1,183 +1,139 @@
 const express = require('express');
+const fs = require('fs');
 const archiver = require('archiver');
-const bodyParser = require('body-parser');
-
 const app = express();
-const PORT = 3000;
+const port = 3000;
 
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true }));
 
-// Página inicial com o formulário
+// Página HTML
 app.get('/', (req, res) => {
   res.send(`
   <!DOCTYPE html>
   <html lang="pt-BR">
   <head>
-    <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Gerador de Bot Imperadores</title>
+    <meta charset="UTF-8">
+    <title>Gerador de Bot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        font-family: Arial, sans-serif;
-        background: #121212;
-        color: #00ffcc;
+        background: linear-gradient(to right, #0f0c29, #302b63, #24243e);
+        color: white;
+        font-family: 'Segoe UI', sans-serif;
         display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        margin: 0;
         flex-direction: column;
+        align-items: center;
+        padding: 40px 20px;
       }
       h1 {
+        font-size: 2em;
         margin-bottom: 20px;
-        font-style: italic;
-        animation: typing 3s steps(20) infinite alternate;
-        white-space: nowrap;
-        overflow: hidden;
-        border-right: 3px solid #00ffcc;
+        animation: blink 1.5s infinite;
       }
-      @keyframes typing {
-        from { width: 0 }
-        to { width: 12ch }
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
       }
       form {
-        background: #222;
-        padding: 30px;
-        border-radius: 15px;
-        box-shadow: 0 0 15px #00ffcc;
-        width: 90%;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 20px;
+        border-radius: 10px;
+        width: 100%;
         max-width: 400px;
       }
       label {
         display: block;
-        margin-bottom: 8px;
-        font-weight: bold;
+        margin: 10px 0 5px;
       }
       input {
         width: 100%;
         padding: 10px;
-        margin-bottom: 20px;
-        border-radius: 8px;
         border: none;
-        outline: none;
-        font-size: 1em;
+        border-radius: 5px;
+        margin-bottom: 15px;
       }
       button {
         width: 100%;
         padding: 12px;
-        background: linear-gradient(90deg, #00ffcc, #008080);
+        background: #ff0066;
+        color: white;
         border: none;
-        border-radius: 12px;
-        font-weight: bold;
+        border-radius: 8px;
+        font-size: 1em;
         cursor: pointer;
-        color: #000;
-        font-size: 1.1em;
-        transition: 0.3s;
+        transition: background 0.3s;
       }
       button:hover {
-        background: linear-gradient(90deg, #008080, #00ffcc);
+        background: #ff3399;
       }
     </style>
   </head>
   <body>
-    <h1>Imperadores - Gerador de Bot</h1>
-    <form action="/generate" method="POST">
-      <label for="botName">Nome do Bot:</label>
-      <input type="text" id="botName" name="botName" placeholder="Ex: Imperadores" required />
-
-      <label for="prefix">Prefixo dos Comandos:</label>
-      <input type="text" id="prefix" name="prefix" placeholder="Ex: !" maxlength="2" required />
-
-      <label for="ownerNumber">Número do Dono (com DDI + DDD):</label>
-      <input type="text" id="ownerNumber" name="ownerNumber" placeholder="Ex: 5511999999999" pattern="\\d{10,15}" required />
-
-      <button type="submit">Download do Bot</button>
+    <h1>🔥 Gerador de Bot WhatsApp 🔥</h1>
+    <form action="/download" method="POST">
+      <label>Nome do Bot:</label>
+      <input type="text" name="nome" required />
+      <label>Prefixo:</label>
+      <input type="text" name="prefixo" required />
+      <label>Número do Dono (com DDI):</label>
+      <input type="text" name="dono" required />
+      <button type="submit">Download</button>
     </form>
   </body>
   </html>
   `);
 });
 
-// Rota que gera e envia o ZIP do bot
-app.post('/generate', (req, res) => {
-  const { botName, prefix, ownerNumber } = req.body;
+// Rota para gerar e baixar o ZIP
+app.post('/download', (req, res) => {
+  const { nome, prefixo, dono } = req.body;
 
-  if (!botName || !prefix || !ownerNumber) {
-    return res.status(400).send('Todos os campos são obrigatórios!');
-  }
-
-  // Conteúdo do bot.js dinamicamente gerado
-  const botJS = `const {
+  // Conteúdo do bot com switch-case
+  const botCode = `
+const {
   default: makeWASocket,
-  useSingleFileAuthState,
-  DisconnectReason,
+  useMultiFileAuthState,
   fetchLatestBaileysVersion
-} = require('@whiskeysockets/baileys');
-const P = require('pino');
-const fs = require('fs');
+} = require("@whiskeysockets/baileys");
 
-const settings = require('./settings.json');
-
-const { state, saveState } = useSingleFileAuthState('./auth_info.json');
+const fs = require("fs");
+const P = require("pino");
+const settings = require("./settings.json");
 
 async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState("auth");
   const { version } = await fetchLatestBaileysVersion();
 
   const imp = makeWASocket({
     version,
-    logger: P({ level: 'silent' }),
+    logger: P({ level: "silent" }),
     printQRInTerminal: true,
     auth: state
   });
 
-  imp.ev.on('creds.update', saveState);
+  imp.ev.on("creds.update", saveCreds);
 
-  imp.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update;
-    if(connection === 'close') {
-      const statusCode = (lastDisconnect?.error)?.output?.statusCode;
-      if(statusCode !== DisconnectReason.loggedOut) {
-        console.log('Reconectando...');
-        startBot();
-      } else {
-        console.log('Desconectado, reinicie o bot manualmente.');
-      }
-    } else if(connection === 'open') {
-      console.log(\`\${settings.botName} está online!\`);
-    }
-  });
+  imp.ev.on("messages.upsert", async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message) return;
 
-  imp.ev.on('messages.upsert', async (msgUpdate) => {
-    if(!msgUpdate.messages) return;
-    const msg = msgUpdate.messages[0];
-    if(!msg.message || msg.key.fromMe) return;
+    const tipo = Object.keys(msg.message)[0];
+    const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
 
-    const messageType = Object.keys(msg.message)[0];
-    if(messageType !== 'conversation' && messageType !== 'extendedTextMessage') return;
+    if (!texto.startsWith(settings.prefixo)) return;
+    const args = texto.slice(settings.prefixo.length).trim().split(/ +/);
+    const comando = args.shift()?.toLowerCase();
 
-    const text = messageType === 'conversation' ? msg.message.conversation : msg.message.extendedTextMessage.text;
-    if(!text.startsWith(settings.prefix)) return;
-
-    const commandBody = text.slice(settings.prefix.length).trim();
-    const args = commandBody.split(/\\s+/);
-    const command = args.shift().toLowerCase();
-
-    const from = msg.key.remoteJid;
-
-    console.log(\`Comando recebido: \${command} de \${from}\`);
-
-    switch(command) {
-      case 'ping':
-        await imp.sendMessage(from, { text: 'Pong!' }, { quoted: msg });
+    switch (comando) {
+      case "oi":
+        await imp.sendMessage(msg.key.remoteJid, { text: "Oi meu patrão!" });
         break;
-      case 'info':
-        await imp.sendMessage(from, { text: \`Bot: \${settings.botName}\\nPrefixo: \${settings.prefix}\\nDono: \${settings.ownerNumber}\` }, { quoted: msg });
-        break;
-      case 'help':
-        await imp.sendMessage(from, { text: \`Comandos disponíveis:\\n\${settings.prefix}ping\\n\${settings.prefix}info\\n\${settings.prefix}help\` }, { quoted: msg });
+      case "dono":
+        await imp.sendMessage(msg.key.remoteJid, { text: "Meu dono é: ${settings.dono}" });
         break;
       default:
-        await imp.sendMessage(from, { text: \`Comando desconhecido: \${command}\\nUse \${settings.prefix}help para ajuda.\` }, { quoted: msg });
+        await imp.sendMessage(msg.key.remoteJid, { text: "Comando não encontrado!" });
     }
   });
 }
@@ -185,46 +141,42 @@ async function startBot() {
 startBot();
 `;
 
-  // Conteúdo settings.json gerado
-  const settingsJSON = JSON.stringify({
-    botName,
-    prefix,
-    ownerNumber
-  }, null, 2);
+  const packageJSON = {
+    name: nome.toLowerCase().replace(/\s+/g, "-"),
+    version: "1.0.0",
+    main: "bot.js",
+    scripts: {
+      start: "node bot.js"
+    },
+    dependencies: {
+      "@whiskeysockets/baileys": "^6.7.0",
+      "pino": "^8.0.0"
+    }
+  };
 
-  // package.json fixo com libs necessárias
-  const packageJSON = `{
-  "name": "imperadores-bot",
-  "version": "1.0.0",
-  "description": "Bot WhatsApp simples com whiskeysockets/baileys",
-  "main": "bot.js",
-  "scripts": {
-    "start": "node bot.js"
-  },
-  "dependencies": {
-    "@whiskeysockets/baileys": "^4.6.0",
-    "pino": "^8.0.0"
-  }
-}
-`;
+  const settingsJSON = {
+    nome,
+    prefixo,
+    dono
+  };
 
-  const filename = botName.toLowerCase().replace(/\s+/g, '_') + '_bot.zip';
-res.set({
-  'Content-Type': 'application/zip',
-  'Content-Disposition': 'attachment; filename="' + filename + '"'
-});
+  // Cria arquivos temporários
+  fs.mkdirSync("temp", { recursive: true });
+  fs.writeFileSync("temp/bot.js", botCode);
+  fs.writeFileSync("temp/package.json", JSON.stringify(packageJSON, null, 2));
+  fs.writeFileSync("temp/settings.json", JSON.stringify(settingsJSON, null, 2));
 
-  const archive = archiver('zip');
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", "attachment; filename=meu-bot.zip");
 
+  const archive = archiver("zip");
   archive.pipe(res);
-
-  archive.append(botJS, { name: 'bot.js' });
-  archive.append(settingsJSON, { name: 'settings.json' });
-  archive.append(packageJSON, { name: 'package.json' });
-
+  archive.directory("temp/", false);
   archive.finalize();
+
+  archive.on("end", () => fs.rmSync("temp", { recursive: true, force: true }));
 });
 
-app.listen(PORT, () => {
-  console.log(`GERADOR DE BOT PRA IMPERADORES ONLINE 😀`);
+app.listen(port, () => {
+  console.log(\`🌐 Servidor rodando em http://localhost:\${port}\`);
 });
