@@ -208,10 +208,11 @@ startBot();
 }
 `;
 
-  res.set({
-    'Content-Type': 'application/zip',
-    'Content-Disposition': \`attachment; filename="\${botName.toLowerCase().replace(/\\s+/g,'_')}_bot.zip"\`
-  });
+  const filename = botName.toLowerCase().replace(/\s+/g, '_') + '_bot.zip';
+res.set({
+  'Content-Type': 'application/zip',
+  'Content-Disposition': 'attachment; filename="' + filename + '"'
+});
 
   const archive = archiver('zip');
 
