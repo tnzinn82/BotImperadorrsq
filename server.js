@@ -1,241 +1,229 @@
 const express = require('express');
-const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = require('@whiskeysockets/baileys');
-const NodeCache = require('node-cache');
-const fs = require('fs');
-const path = require('path');
+const archiver = require('archiver');
+const bodyParser = require('body-parser');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// Cria pasta auth se não existir
-if (!fs.existsSync('./auth')) fs.mkdirSync('./auth');
-
-// Gera settings.json padrão se não existir
-const settingsPath = './settings.json';
-if (!fs.existsSync(settingsPath)) {
-  fs.writeFileSync(settingsPath, JSON.stringify({
-    nomeBot: "ImperadoresBot",
-    prefixo: "!",
-    numeroDono: "5521999999999"
-  }, null, 2));
-}
-
-// Rota raiz - site com menu e botão ativar bot
+// Página inicial com o formulário
 app.get('/', (req, res) => {
   res.send(`
   <!DOCTYPE html>
   <html lang="pt-BR">
   <head>
-    <meta charset="UTF-8" />
-    <title>Imperadores - Gerador de Bot</title>
+    <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gerador de Bot Imperadores</title>
     <style>
       body {
-        background: linear-gradient(135deg, #1f005c, #5b0060);
-        color: #fff;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        margin: 0;
-        padding: 0;
-      }
-      nav {
-        background-color: rgba(0,0,0,0.6);
-        padding: 1em 2em;
-        font-style: italic;
-        font-weight: bold;
-        font-size: 2em;
-        color: #0ff;
-        overflow: hidden;
-        white-space: nowrap;
-        animation: typing 4s steps(20) infinite alternate;
-        border-bottom: 3px solid #0ff;
-        user-select: none;
-      }
-      @keyframes typing {
-        from { width: 0; }
-        to { width: 100%; }
-      }
-      main {
+        font-family: Arial, sans-serif;
+        background: #121212;
+        color: #00ffcc;
         display: flex;
-        flex-direction: column;
+        justify-content: center;
         align-items: center;
-        padding: 50px 20px;
+        height: 100vh;
+        margin: 0;
+        flex-direction: column;
       }
       h1 {
-        font-size: 3em;
-        margin-bottom: 30px;
-        text-shadow: 0 0 10px #0ff;
+        margin-bottom: 20px;
+        font-style: italic;
+        animation: typing 3s steps(20) infinite alternate;
+        white-space: nowrap;
+        overflow: hidden;
+        border-right: 3px solid #00ffcc;
+      }
+      @keyframes typing {
+        from { width: 0 }
+        to { width: 12ch }
       }
       form {
-        display: flex;
-        flex-direction: column;
-        width: 300px;
+        background: #222;
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 0 15px #00ffcc;
+        width: 90%;
+        max-width: 400px;
       }
       label {
-        font-size: 1.1em;
-        margin-bottom: 5px;
-        text-align: left;
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
       }
       input {
+        width: 100%;
         padding: 10px;
-        font-size: 1em;
         margin-bottom: 20px;
         border-radius: 8px;
         border: none;
         outline: none;
+        font-size: 1em;
       }
       button {
-        padding: 15px;
-        font-size: 1.3em;
-        background: linear-gradient(90deg, #00ffe7, #0077ff);
+        width: 100%;
+        padding: 12px;
+        background: linear-gradient(90deg, #00ffcc, #008080);
         border: none;
         border-radius: 12px;
-        color: #000;
         font-weight: bold;
         cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 0 15px #00ffe7;
+        color: #000;
+        font-size: 1.1em;
+        transition: 0.3s;
       }
       button:hover {
-        background: linear-gradient(90deg, #0077ff, #00ffe7);
-        box-shadow: 0 0 30px #0077ff;
-      }
-      @media (max-width: 500px) {
-        main {
-          padding: 30px 10px;
-        }
-        h1 {
-          font-size: 2em;
-        }
-        form {
-          width: 90%;
-        }
-      }
-      .status {
-        margin-top: 20px;
-        font-weight: bold;
-        font-size: 1.2em;
-        color: #0ff;
+        background: linear-gradient(90deg, #008080, #00ffcc);
       }
     </style>
   </head>
   <body>
-    <nav>IMPERADORES</nav>
-    <main>
-      <h1>Gerador de Bot WhatsApp</h1>
-      <form id="botForm" action="/download" method="POST">
-        <label for="nomeBot">Nome do Bot</label>
-        <input type="text" id="nomeBot" name="nomeBot" placeholder="ImperadoresBot" required />
-        <label for="prefixo">Prefixo de Comando</label>
-        <input type="text" id="prefixo" name="prefixo" placeholder="!" maxlength="3" required />
-        <label for="numeroDono">Número do Dono (com DDI e DDD)</label>
-        <input type="text" id="numeroDono" name="numeroDono" placeholder="5521999999999" pattern="\\d{10,15}" required />
-        <button type="submit">Download / Ativar Bot</button>
-      </form>
-      <div class="status" id="status"></div>
-    </main>
+    <h1>Imperadores - Gerador de Bot</h1>
+    <form action="/generate" method="POST">
+      <label for="botName">Nome do Bot:</label>
+      <input type="text" id="botName" name="botName" placeholder="Ex: Imperadores" required />
 
-    <script>
-      const form = document.getElementById('botForm');
-      const status = document.getElementById('status');
-      form.addEventListener('submit', async e => {
-        e.preventDefault();
-        status.textContent = "Iniciando...";
-        const data = new URLSearchParams(new FormData(form));
-        try {
-          const res = await fetch('/download', {
-            method: 'POST',
-            headers: {'Content-Type':'application/x-www-form-urlencoded'},
-            body: data
-          });
-          const text = await res.text();
-          status.innerHTML = text;
-        } catch (err) {
-          status.textContent = "Erro ao iniciar o bot.";
-        }
-      });
-    </script>
+      <label for="prefix">Prefixo dos Comandos:</label>
+      <input type="text" id="prefix" name="prefix" placeholder="Ex: !" maxlength="2" required />
+
+      <label for="ownerNumber">Número do Dono (com DDI + DDD):</label>
+      <input type="text" id="ownerNumber" name="ownerNumber" placeholder="Ex: 5511999999999" pattern="\\d{10,15}" required />
+
+      <button type="submit">Download do Bot</button>
+    </form>
   </body>
   </html>
   `);
 });
 
-// POST que recebe configs, salva settings e inicia o bot
-app.post('/download', async (req, res) => {
-  const { nomeBot, prefixo, numeroDono } = req.body;
+// Rota que gera e envia o ZIP do bot
+app.post('/generate', (req, res) => {
+  const { botName, prefix, ownerNumber } = req.body;
 
-  // Validações básicas
-  if (!nomeBot || !prefixo || !numeroDono) return res.status(400).send("Preencha todos os campos.");
-
-  // Salva as configs no settings.json
-  const config = { nomeBot, prefixo, numeroDono };
-  fs.writeFileSync('./settings.json', JSON.stringify(config, null, 2));
-
-  // Inicia o bot com configs novas
-  try {
-    await iniciarBot(config);
-    res.send(`<span style="color:#0f0;">✅ Bot "${nomeBot}" iniciado com sucesso!<br>Prefixo: ${prefixo}<br>Dono: ${numeroDono}</span>`);
-  } catch (e) {
-    console.error(e);
-    res.status(500).send("Erro ao iniciar o bot.");
+  if (!botName || !prefix || !ownerNumber) {
+    return res.status(400).send('Todos os campos são obrigatórios!');
   }
-});
 
-async function iniciarBot({ nomeBot, prefixo, numeroDono }) {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth');
+  // Conteúdo do bot.js dinamicamente gerado
+  const botJS = `const {
+  default: makeWASocket,
+  useSingleFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} = require('@whiskeysockets/baileys');
+const P = require('pino');
+const fs = require('fs');
+
+const settings = require('./settings.json');
+
+const { state, saveState } = useSingleFileAuthState('./auth_info.json');
+
+async function startBot() {
   const { version } = await fetchLatestBaileysVersion();
 
   const imp = makeWASocket({
     version,
+    logger: P({ level: 'silent' }),
     printQRInTerminal: true,
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, new NodeCache())
-    }
+    auth: state
   });
 
-  imp.ev.on('creds.update', saveCreds);
+  imp.ev.on('creds.update', saveState);
 
   imp.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect } = update;
     if(connection === 'close') {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log(`[BOT] Conexão encerrada. Reconectar? ${shouldReconnect}`);
-      if (shouldReconnect) iniciarBot({ nomeBot, prefixo, numeroDono });
+      const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+      if(statusCode !== DisconnectReason.loggedOut) {
+        console.log('Reconectando...');
+        startBot();
+      } else {
+        console.log('Desconectado, reinicie o bot manualmente.');
+      }
     } else if(connection === 'open') {
-      console.log(`[BOT] ${nomeBot} conectado com sucesso!`);
+      console.log(\`\${settings.botName} está online!\`);
     }
   });
 
-  imp.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message || msg.key.fromMe) return;
+  imp.ev.on('messages.upsert', async (msgUpdate) => {
+    if(!msgUpdate.messages) return;
+    const msg = msgUpdate.messages[0];
+    if(!msg.message || msg.key.fromMe) return;
 
-    // Pega o texto da mensagem
-    const body = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-    // Se não começa com prefixo, ignora
-    if (!body.startsWith(prefixo)) return;
+    const messageType = Object.keys(msg.message)[0];
+    if(messageType !== 'conversation' && messageType !== 'extendedTextMessage') return;
 
-    const args = body.slice(prefixo.length).trim().split(/ +/);
+    const text = messageType === 'conversation' ? msg.message.conversation : msg.message.extendedTextMessage.text;
+    if(!text.startsWith(settings.prefix)) return;
+
+    const commandBody = text.slice(settings.prefix.length).trim();
+    const args = commandBody.split(/\\s+/);
     const command = args.shift().toLowerCase();
 
+    const from = msg.key.remoteJid;
+
+    console.log(\`Comando recebido: \${command} de \${from}\`);
+
     switch(command) {
-      case 'oi':
-        await imp.sendMessage(msg.key.remoteJid, { text: `Fala meu cria! Eu sou o ${nomeBot}` });
+      case 'ping':
+        await imp.sendMessage(from, { text: 'Pong!' }, { quoted: msg });
         break;
-      case 'menu':
-        await imp.sendMessage(msg.key.remoteJid, { text: "📜 Comandos: !oi, !menu, !data" });
+      case 'info':
+        await imp.sendMessage(from, { text: \`Bot: \${settings.botName}\\nPrefixo: \${settings.prefix}\\nDono: \${settings.ownerNumber}\` }, { quoted: msg });
         break;
-      case 'data':
-        await imp.sendMessage(msg.key.remoteJid, { text: `🕒 Agora: ${new Date().toLocaleString()}` });
+      case 'help':
+        await imp.sendMessage(from, { text: \`Comandos disponíveis:\\n\${settings.prefix}ping\\n\${settings.prefix}info\\n\${settings.prefix}help\` }, { quoted: msg });
         break;
       default:
-        await imp.sendMessage(msg.key.remoteJid, { text: `❌ Comando "${command}" não reconhecido.` });
+        await imp.sendMessage(from, { text: \`Comando desconhecido: \${command}\\nUse \${settings.prefix}help para ajuda.\` }, { quoted: msg });
     }
   });
 }
 
-// Inicia servidor
-app.listen(PORT, () => console.log(`🚀 Servidor rodando em http://localhost:${PORT}`));
+startBot();
+`;
+
+  // Conteúdo settings.json gerado
+  const settingsJSON = JSON.stringify({
+    botName,
+    prefix,
+    ownerNumber
+  }, null, 2);
+
+  // package.json fixo com libs necessárias
+  const packageJSON = `{
+  "name": "imperadores-bot",
+  "version": "1.0.0",
+  "description": "Bot WhatsApp simples com whiskeysockets/baileys",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^4.6.0",
+    "pino": "^8.0.0"
+  }
+}
+`;
+
+  res.set({
+    'Content-Type': 'application/zip',
+    'Content-Disposition': \`attachment; filename="\${botName.toLowerCase().replace(/\\s+/g,'_')}_bot.zip"\`
+  });
+
+  const archive = archiver('zip');
+
+  archive.pipe(res);
+
+  archive.append(botJS, { name: 'bot.js' });
+  archive.append(settingsJSON, { name: 'settings.json' });
+  archive.append(packageJSON, { name: 'package.json' });
+
+  archive.finalize();
+});
+
+app.listen(PORT, () => {
+  console.log(`GERADOR DE BOT PRA IMPERADORES ONLINE 😀`);
+});
